@@ -53,14 +53,21 @@ function PlaylistInput() {
         body: JSON.stringify({ playlistUrl: trimmed })
       })
 
-      const data = await res.json()
-      if (data.success && data.courseId) {
+      let data
+      try {
+        data = await res.json()
+      } catch (jsonErr) {
+        throw new Error(`Server returned ${res.status}: ${res.statusText || 'Endpoint not found'}`)
+      }
+
+      if (res.ok && data?.success && data?.courseId) {
         navigate(`/course/${data.courseId}`)
       } else {
-        setError(data.error || 'Failed to generate course.')
+        setError(data?.error || `Failed to generate course (Status: ${res.status})`)
       }
     } catch (err) {
-      setError('Network error. Please make sure the backend is running.')
+      console.error('Course parsing error:', err)
+      setError(err.message || 'Error communicating with server.')
     } finally {
       setLoading(false)
     }

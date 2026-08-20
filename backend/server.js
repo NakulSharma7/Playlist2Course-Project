@@ -14,15 +14,13 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB connection
+// MongoDB connection with serverless caching
 const MONGODB_URI = process.env.MONGODB_URI;
 
-if (MONGODB_URI) {
+if (MONGODB_URI && mongoose.connection.readyState === 0) {
   mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
     .then(() => console.log('✅ Connected to MongoDB Database successfully!'))
     .catch((err) => console.error('⚠️ MongoDB Connection Warning:', err.message));
-} else {
-  console.log('ℹ️ MONGODB_URI not provided yet. Backend running in Memory Mode.');
 }
 
 // Health Check

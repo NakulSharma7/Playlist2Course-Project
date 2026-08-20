@@ -63,18 +63,24 @@ export default function DashboardPage() {
         }),
       });
 
-      const data = await res.json();
-      if (data.success && data.course) {
+      let data;
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        throw new Error(`Server returned ${res.status}: ${res.statusText || 'Endpoint not found'}`);
+      }
+
+      if (res.ok && data?.success && data?.course) {
         setCourses((prev) => [data.course, ...prev.filter((c) => c.courseId !== data.course.courseId)]);
         setShowCreateModal(false);
         setPlaylistUrl('');
-        // Navigate to newly generated course view
         navigate(`/course/${data.courseId}`);
       } else {
-        setErrorMsg(data.error || 'Failed to generate course.');
+        setErrorMsg(data?.error || `Failed to generate course (Status: ${res.status})`);
       }
     } catch (err) {
-      setErrorMsg('Network error. Please make sure the backend server is running.');
+      console.error('Course creation error:', err);
+      setErrorMsg(err.message || 'Error communicating with server.');
     } finally {
       setIsSubmitting(false);
     }

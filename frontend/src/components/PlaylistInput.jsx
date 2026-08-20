@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '@clerk/clerk-react'
 import { ArrowRight, AlertCircle, CheckCircle2, Sparkles } from 'lucide-react'
+import { API_BASE_URL } from '../config.js'
 
 function PlaylistInput() {
   const { isLoaded, isSignedIn } = useUser()
@@ -46,7 +47,7 @@ function PlaylistInput() {
 
     try {
       setLoading(true)
-      const res = await fetch('http://localhost:5000/api/courses/parse', {
+      const res = await fetch(`${API_BASE_URL}/courses/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlistUrl: trimmed })

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
+import { API_BASE_URL } from '../config.js';
 
 export default function Hero() {
   const { user, isLoaded, isSignedIn } = useUser();
@@ -33,7 +34,7 @@ export default function Hero() {
       setFormNote('Processing playlist into course modules...');
 
       // Call backend API to parse YouTube playlist
-      const response = await fetch('http://localhost:5000/api/courses/parse', {
+      const response = await fetch(`${API_BASE_URL}/courses/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

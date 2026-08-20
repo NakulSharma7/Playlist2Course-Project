@@ -3,6 +3,7 @@ import { useParams, Link, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import Header from '../components/Header.jsx';
 import Footer from '../components/Footer.jsx';
+import { API_BASE_URL } from '../config.js';
 
 export default function CourseView() {
   const { id } = useParams();
@@ -27,7 +28,7 @@ export default function CourseView() {
     async function fetchCourseData() {
       try {
         setLoading(true);
-        const courseRes = await fetch(`http://localhost:5000/api/courses/${id || 'striver'}?clerkUserId=${userId}&userId=${userId}`);
+        const courseRes = await fetch(`${API_BASE_URL}/courses/${id || 'striver'}?clerkUserId=${userId}&userId=${userId}`);
         const courseData = await courseRes.json();
         setCourse(courseData);
 
@@ -35,7 +36,7 @@ export default function CourseView() {
           setActiveVideo(courseData.modules[0].lessons[0]);
         }
 
-        const progressRes = await fetch(`http://localhost:5000/api/progress/${id || 'striver'}?userId=${userId}`);
+        const progressRes = await fetch(`${API_BASE_URL}/progress/${id || 'striver'}?userId=${userId}`);
         const progressData = await progressRes.json();
 
         setCompletedVideoIds(progressData.completedVideoIds || []);
@@ -71,7 +72,7 @@ export default function CourseView() {
     });
 
     // Background sync to backend
-    fetch('http://localhost:5000/api/progress/toggle', {
+    fetch(`${API_BASE_URL}/progress/toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

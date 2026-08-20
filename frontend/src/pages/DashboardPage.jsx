@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { useUser, UserButton, SignedIn, SignedOut, SignInButton } from '@clerk/clerk-react';
+import { API_BASE_URL } from '../config.js';
 
 export default function DashboardPage() {
   const { user, isLoaded, isSignedIn } = useUser();
@@ -25,7 +26,7 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         const query = user?.id ? `?clerkUserId=${user.id}&userId=${user.id}` : '';
-        const res = await fetch(`http://localhost:5000/api/courses${query}`);
+        const res = await fetch(`${API_BASE_URL}/courses${query}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setCourses(data);
@@ -52,7 +53,7 @@ export default function DashboardPage() {
       setIsSubmitting(true);
       setErrorMsg('');
 
-      const res = await fetch('http://localhost:5000/api/courses/parse', {
+      const res = await fetch(`${API_BASE_URL}/courses/parse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

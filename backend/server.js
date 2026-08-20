@@ -22,7 +22,7 @@ if (MONGODB_URI) {
     .then(() => console.log('✅ Connected to MongoDB Database successfully!'))
     .catch((err) => console.error('⚠️ MongoDB Connection Warning:', err.message));
 } else {
-  console.log('ℹ️ MONGODB_URI not provided yet. Backend running in Memory Mode. (Add MONGODB_URI to backend/.env to connect)');
+  console.log('ℹ️ MONGODB_URI not provided yet. Backend running in Memory Mode.');
 }
 
 // Health Check
@@ -34,6 +34,10 @@ app.get('/api/health', (req, res) => {
 app.use('/api/courses', courseRoutes);
 app.use('/api/progress', progressRoutes);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Playlist2Course Backend Server running on http://localhost:${PORT}`);
-});
+export default app;
+
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Playlist2Course Backend Server running on http://localhost:${PORT}`);
+  });
+}

@@ -1,7 +1,14 @@
 // Centralized API configuration
-// If VITE_API_BASE_URL is set, use it.
-// Otherwise, in production (e.g. Vercel), use relative '/api'.
-// In development, default to 'http://localhost:5000/api'.
+// If in production (Vercel), ignore localhost/127.0.0.1 in VITE_API_BASE_URL and use relative '/api'
 const isProd = import.meta.env.PROD;
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || (isProd ? '/api' : 'http://localhost:5000/api');
-export const API_BASE_URL = rawBaseUrl.replace(/\/$/, '');
+let baseUrl = import.meta.env.VITE_API_BASE_URL;
+
+if (isProd && (!baseUrl || baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1'))) {
+  baseUrl = '/api';
+}
+
+if (!baseUrl) {
+  baseUrl = 'http://localhost:5000/api';
+}
+
+export const API_BASE_URL = baseUrl.replace(/\/$/, '');

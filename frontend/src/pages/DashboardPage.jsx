@@ -24,7 +24,8 @@ export default function DashboardPage() {
     async function fetchCourses() {
       try {
         setLoading(true);
-        const res = await fetch('http://localhost:5000/api/courses');
+        const query = user?.id ? `?clerkUserId=${user.id}&userId=${user.id}` : '';
+        const res = await fetch(`http://localhost:5000/api/courses${query}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setCourses(data);
@@ -37,7 +38,7 @@ export default function DashboardPage() {
     }
 
     fetchCourses();
-  }, []);
+  }, [user?.id]);
 
   // Handle course creation
   const handleCreateCourse = async (e) => {
@@ -54,7 +55,11 @@ export default function DashboardPage() {
       const res = await fetch('http://localhost:5000/api/courses/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistUrl: playlistUrl.trim() }),
+        body: JSON.stringify({
+          playlistUrl: playlistUrl.trim(),
+          userId: user?.id || 'guest_user',
+          clerkUserId: user?.id || 'guest_user'
+        }),
       });
 
       const data = await res.json();
@@ -99,33 +104,11 @@ export default function DashboardPage() {
             className="brand"
             style={{ fontSize: '1.25rem', fontWeight: 800, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '36px' }}
           >
-            <span className="mark">↗</span>CourseForge
+            <span className="mark">↗</span>Playlist2Course
           </Link>
 
-          {/* Sidebar Nav Items */}
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <Link
-              to="/"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px 14px',
-                borderRadius: '8px',
-                color: 'var(--muted)',
-                fontWeight: 600,
-                fontSize: '.9rem',
-                textDecoration: 'none',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              Home
-            </Link>
-
+          {/* Navigation Items: Courses & Profile */}
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button
               onClick={() => setActiveTab('courses')}
               style={{
@@ -154,7 +137,7 @@ export default function DashboardPage() {
           </nav>
         </div>
 
-        {/* User Profile / Footer section */}
+        {/* User Profile Section */}
         <div style={{ paddingTop: '20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <SignedIn>
             <UserButton showName />
@@ -311,13 +294,31 @@ export default function DashboardPage() {
                     </h3>
                   </div>
 
-                  <div style={{ marginTop: '20px' }}>
+                  <div style={{ marginTop: '16px' }}>
+                    {/* Progress Bar & Percentage */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ font: "600 .75rem 'DM Mono', monospace", color: 'var(--muted)' }}>Progress</span>
+                      <span style={{ font: "700 .8rem 'DM Mono', monospace", color: 'var(--accent)' }}>
+                        {course.progressPercent || 0}% ({course.completedCount || 0}/{course.totalVideos || 0})
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
+                      <div
+                        style={{
+                          width: `${course.progressPercent || 0}%`,
+                          height: '100%',
+                          background: 'var(--accent)',
+                          transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        }}
+                      ></div>
+                    </div>
+
                     <Link
                       to={`/course/${course.courseId}`}
                       className="button button-primary"
                       style={{ width: '100%', textDecoration: 'none', textAlign: 'center', display: 'block' }}
                     >
-                      Open Course <span>↗</span>
+                      Continue Learning <span>→</span>
                     </Link>
                   </div>
                 </div>

@@ -1,58 +1,78 @@
 import { useState } from 'react';
-import { SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useUser, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-export default function Header() {
+export default function Header({ hideNavLinks = false }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const { isLoaded, isSignedIn } = useUser();
+  const navigate = useNavigate();
 
   const toggleMenu = () => {
     setMobileOpen(prev => !prev);
   };
 
+  const handleCoursesClick = (e) => {
+    e.preventDefault();
+    setMobileOpen(false);
+    if (isLoaded && !isSignedIn) {
+      navigate('/sign-in');
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   return (
     <header className="shell" data-od-id="site-header">
       <nav className={`nav ${mobileOpen ? 'mobile-open' : ''}`} data-od-id="primary-navigation">
-        <a href="/" className="brand" aria-label="CourseForge home" data-od-id="courseforge-logo">
-          <span className="mark">↗</span>CourseForge
-        </a>
+        <Link to="/" className="brand" aria-label="Playlist2Course home" data-od-id="playlist2course-logo">
+          <span className="mark">↗</span>Playlist2Course
+        </Link>
         
-        <div className="nav-links">
-          <a href="/" data-od-id="home-link" onClick={() => setMobileOpen(false)}>
-            Home
-          </a>
-          <a href="/dashboard" data-od-id="courses-link" onClick={() => setMobileOpen(false)}>
-            Courses
-          </a>
-          <a href="/#how-it-works" data-od-id="how-it-works-link" onClick={() => setMobileOpen(false)}>
-            How it works
-          </a>
-          <a href="/#features" data-od-id="features-link" onClick={() => setMobileOpen(false)}>
-            Features
-          </a>
-          <a href="/#faq" data-od-id="faq-link" onClick={() => setMobileOpen(false)}>
-            FAQ
-          </a>
-        </div>
+        {!hideNavLinks && (
+          <div className="nav-links">
+            <Link to="/" data-od-id="home-link" onClick={() => setMobileOpen(false)}>
+              Home
+            </Link>
+            <a href="/dashboard" data-od-id="courses-link" onClick={handleCoursesClick}>
+              Courses
+            </a>
+            <a href="/#how-it-works" data-od-id="how-it-works-link" onClick={() => setMobileOpen(false)}>
+              How it works
+            </a>
+            <a href="/#features" data-od-id="features-link" onClick={() => setMobileOpen(false)}>
+              Features
+            </a>
+            <a href="/#faq" data-od-id="faq-link" onClick={() => setMobileOpen(false)}>
+              FAQ
+            </a>
+          </div>
+        )}
 
         <div className="nav-actions">
           {PUBLISHABLE_KEY ? (
             <>
               <SignedOut>
-                <SignInButton mode="modal">
+                <SignInButton mode="modal" forceRedirectUrl="/dashboard" fallbackRedirectUrl="/dashboard">
                   <button className="login" style={{ background: 'none', border: 0, cursor: 'pointer' }}>
                     Sign In
                   </button>
                 </SignInButton>
-                <SignUpButton mode="modal">
+                <SignUpButton mode="modal" forceRedirectUrl="/dashboard" fallbackRedirectUrl="/dashboard">
                   <button className="button button-primary" style={{ cursor: 'pointer' }}>
                     Sign Up <span>↗</span>
                   </button>
                 </SignUpButton>
               </SignedOut>
               <SignedIn>
-                <UserButton showName />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <Link to="/dashboard" className="button button-primary" style={{ padding: '8px 16px', fontSize: '.8rem' }}>
+                    Dashboard <span>↗</span>
+                  </Link>
+                  <UserButton showName />
+                </div>
               </SignedIn>
             </>
           ) : (

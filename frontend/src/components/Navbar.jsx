@@ -23,7 +23,7 @@ function Navbar() {
               <Anvil size={20} className="text-white" />
             </div>
             <span className="text-xl font-bold tracking-tight text-slate-900">
-              CourseForge
+              Playlist2Course
             </span>
           </Link>
 

@@ -1,4 +1,17 @@
+import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
+
 export default function Cta() {
+  const { isLoaded, isSignedIn } = useUser();
+  const navigate = useNavigate();
+
+  const handleCtaClick = (e) => {
+    if (isLoaded && !isSignedIn) {
+      e.preventDefault();
+      navigate('/sign-in');
+    }
+  };
+
   return (
     <section className="cta-section" data-od-id="final-cta-section">
       <div className="shell cta-grid">
@@ -11,7 +24,7 @@ export default function Cta() {
             Turn the playlists you already watch into courses you can actually finish.
           </p>
         </div>
-        <a href="#playlist" className="button" data-od-id="final-cta-button">
+        <a href="#playlist" className="button" onClick={handleCtaClick} data-od-id="final-cta-button">
           Create your first course <span>↗</span>
         </a>
       </div>

@@ -2,8 +2,8 @@ export default function Faq() {
   const faqs = [
     {
       id: 'faq-supported-playlists',
-      question: 'What playlists will CourseForge support?',
-      answer: 'CourseForge is being designed for educational video playlists. Support for specific platforms and playlist formats will be announced as the product develops.',
+      question: 'What playlists will Playlist2Course support?',
+      answer: 'Playlist2Course is being designed for educational video playlists. Support for specific platforms and playlist formats will be announced as the product develops.',
     },
     {
       id: 'faq-create-account',
@@ -13,11 +13,11 @@ export default function Faq() {
     {
       id: 'faq-organization',
       question: 'How will a playlist be organized?',
-      answer: 'CourseForge will group related lessons into a practical sequence, giving long playlists clearer modules and a focused next step.',
+      answer: 'Playlist2Course will group related lessons into a practical sequence, giving long playlists clearer modules and a focused next step.',
     },
     {
       id: 'faq-availability',
-      question: 'Can I use CourseForge today?',
+      question: 'Can I use Playlist2Course today?',
       answer: 'The playlist workflow is still in development. You can explore the product direction here while course creation is being prepared.',
     },
   ];

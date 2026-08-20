@@ -18,7 +18,7 @@ app.use(express.json());
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (MONGODB_URI) {
-  mongoose.connect(MONGODB_URI)
+  mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
     .then(() => console.log('✅ Connected to MongoDB Database successfully!'))
     .catch((err) => console.error('⚠️ MongoDB Connection Warning:', err.message));
 } else {
@@ -27,7 +27,7 @@ if (MONGODB_URI) {
 
 // Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', service: 'CourseForge Backend API', mongodbConnected: mongoose.connection.readyState === 1 });
+  res.json({ status: 'OK', service: 'Playlist2Course Backend API', mongodbConnected: mongoose.connection.readyState === 1 });
 });
 
 // Routes
@@ -35,5 +35,5 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/progress', progressRoutes);
 
 app.listen(PORT, () => {
-  console.log(`🚀 CourseForge Backend Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Playlist2Course Backend Server running on http://localhost:${PORT}`);
 });

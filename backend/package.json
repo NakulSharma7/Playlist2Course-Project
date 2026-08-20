@@ -1,7 +1,7 @@
 {
-  "name": "courseforge-backend",
+  "name": "playlist2course-backend",
   "version": "1.0.0",
-  "description": "Backend API for CourseForge with MongoDB, Clerk Auth, and YouTube Playlist Parser",
+  "description": "Backend API for Playlist2Course with MongoDB, Clerk Auth, and YouTube Playlist Parser",
   "main": "server.js",
   "type": "module",
   "scripts": {

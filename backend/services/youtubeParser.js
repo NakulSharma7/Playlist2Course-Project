@@ -24,7 +24,7 @@ function parseISODuration(isoDuration) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-// Dynamically parse ANY YouTube playlist using YouTube Data API v3
+// Fast & parallelized YouTube playlist parser using YouTube Data API v3
 export async function parsePlaylist(playlistUrl) {
   const playlistId = extractPlaylistId(playlistUrl);
   if (!playlistId) {
@@ -39,14 +39,29 @@ export async function parsePlaylist(playlistUrl) {
   try {
     console.log(`📡 Fetching live YouTube Playlist via API for ID: ${playlistId}`);
 
-    // 1. Fetch Playlist Title & Metadata
-    const playlistRes = await axios.get('https://www.googleapis.com/youtube/v3/playlists', {
-      params: {
-        part: 'snippet,contentDetails',
-        id: playlistId,
-        key: apiKey,
-      },
-    });
+    // Set 6-second timeout for fast responses
+    const axiosConfig = { timeout: 6000 };
+
+    // 1. Fetch Playlist Title & Metadata and First 50 Playlist Items in PARALLEL
+    const [playlistRes, itemsRes] = await Promise.all([
+      axios.get('https://www.googleapis.com/youtube/v3/playlists', {
+        ...axiosConfig,
+        params: {
+          part: 'snippet,contentDetails',
+          id: playlistId,
+          key: apiKey,
+        },
+      }),
+      axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
+        ...axiosConfig,
+        params: {
+          part: 'snippet,contentDetails',
+          playlistId: playlistId,
+          maxResults: 50,
+          key: apiKey,
+        },
+      }),
+    ]);
 
     if (!playlistRes.data.items || playlistRes.data.items.length === 0) {
       throw new Error('YouTube playlist not found or is set to private.');
@@ -55,48 +70,39 @@ export async function parsePlaylist(playlistUrl) {
     const playlistSnippet = playlistRes.data.items[0].snippet;
     const title = playlistSnippet.title || 'YouTube Educational Playlist';
 
-    // 2. Fetch ALL Playlist Items (handling pagination up to 150 videos)
-    let items = [];
-    let nextPageToken = '';
-
-    do {
-      const itemsRes = await axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
-        params: {
-          part: 'snippet,contentDetails',
-          playlistId: playlistId,
-          maxResults: 50,
-          pageToken: nextPageToken || undefined,
-          key: apiKey,
-        },
-      });
-
-      const fetchedItems = itemsRes.data.items || [];
-      items = items.concat(fetchedItems);
-      nextPageToken = itemsRes.data.nextPageToken || '';
-    } while (nextPageToken && items.length < 150);
-
+    const items = itemsRes.data.items || [];
     if (items.length === 0) {
       throw new Error('This YouTube playlist contains no videos.');
     }
 
-    // 3. Extract Video IDs & Fetch Durations in Batches of 50
+    // 2. Extract Video IDs
     const videoIds = items
       .map((item) => item.contentDetails?.videoId || item.snippet?.resourceId?.videoId)
       .filter(Boolean);
 
+    // 3. Fetch Durations in Parallel Batches of 50
     let durationMap = {};
-    for (let i = 0; i < videoIds.length; i += 50) {
-      const batchIds = videoIds.slice(i, i + 50);
-      const videosRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-        params: {
-          part: 'contentDetails',
-          id: batchIds.join(','),
-          key: apiKey,
-        },
-      });
+    if (videoIds.length > 0) {
+      const batchPromises = [];
+      for (let i = 0; i < videoIds.length; i += 50) {
+        const batchIds = videoIds.slice(i, i + 50);
+        batchPromises.push(
+          axios.get('https://www.googleapis.com/youtube/v3/videos', {
+            ...axiosConfig,
+            params: {
+              part: 'contentDetails',
+              id: batchIds.join(','),
+              key: apiKey,
+            },
+          })
+        );
+      }
 
-      (videosRes.data.items || []).forEach((v) => {
-        durationMap[v.id] = parseISODuration(v.contentDetails?.duration);
+      const videoBatches = await Promise.all(batchPromises);
+      videoBatches.forEach((vRes) => {
+        (vRes.data.items || []).forEach((v) => {
+          durationMap[v.id] = parseISODuration(v.contentDetails?.duration);
+        });
       });
     }
 
@@ -131,7 +137,7 @@ export async function parsePlaylist(playlistUrl) {
       });
     }
 
-    console.log(`✅ Successfully generated dynamic course: "${title}" (${lessons.length} videos, ${modules.length} modules)`);
+    console.log(`⚡ Fast generated course in parallel: "${title}" (${lessons.length} videos, ${modules.length} modules)`);
 
     return {
       courseId: playlistId,

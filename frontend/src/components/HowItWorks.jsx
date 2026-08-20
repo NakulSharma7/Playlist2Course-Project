@@ -30,7 +30,7 @@ export default function HowItWorks() {
               <path d="M19 11v8l6 4" stroke="currentColor" />
             </svg>
             <h3>Process</h3>
-            <p>CourseForge analyzes and organizes the playlist content.</p>
+            <p>Playlist2Course analyzes and organizes the playlist content.</p>
           </article>
           <article className="step" data-od-id="step-card-learn">
             <span className="step-no">03 — LEARN</span>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, Navigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import Header from '../components/Header.jsx';
@@ -15,6 +15,8 @@ export default function CourseView() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const playerRef = useRef(null);
+
   // Redirect signed out users to sign in page
   if (isLoaded && !isSignedIn) {
     return <Navigate to="/sign-in" replace />;
@@ -25,17 +27,14 @@ export default function CourseView() {
     async function fetchCourseData() {
       try {
         setLoading(true);
-        // Fetch course structure from backend API
-        const courseRes = await fetch(`http://localhost:5000/api/courses/${id || 'striver'}`);
+        const courseRes = await fetch(`http://localhost:5000/api/courses/${id || 'striver'}?clerkUserId=${userId}&userId=${userId}`);
         const courseData = await courseRes.json();
         setCourse(courseData);
 
-        // Select first lesson by default
         if (courseData?.modules?.[0]?.lessons?.[0]) {
           setActiveVideo(courseData.modules[0].lessons[0]);
         }
 
-        // Fetch user progress for this course (keyed by Clerk User ID or guest)
         const progressRes = await fetch(`http://localhost:5000/api/progress/${id || 'striver'}?userId=${userId}`);
         const progressData = await progressRes.json();
 
@@ -51,35 +50,109 @@ export default function CourseView() {
     fetchCourseData();
   }, [id, userId]);
 
-  // Toggle video lesson completion
-  const handleToggleComplete = async (videoId, e) => {
-    if (e) e.stopPropagation();
-    try {
-      const res = await fetch('http://localhost:5000/api/progress/toggle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          courseId: id || 'striver',
-          videoId,
-          totalVideos: course?.totalVideos || 55
-        })
-      });
+  // Toggle video lesson completion optimistically (0ms latency, zero lag)
+  const handleToggleComplete = (videoId, e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
 
-      const data = await res.json();
-      if (data.success) {
-        setCompletedVideoIds(data.completedVideoIds);
-        setProgressPercent(data.progressPercent);
-      }
-    } catch (err) {
-      console.error('Error toggling progress:', err);
+    setCompletedVideoIds((prev) => {
+      const isCompleted = prev.includes(videoId);
+      const updated = isCompleted
+        ? prev.filter((vId) => vId !== videoId)
+        : [...prev, videoId];
+
+      const total = course?.totalVideos || 1;
+      const newPercent = Math.round((updated.length / total) * 100);
+      setProgressPercent(newPercent);
+
+      return updated;
+    });
+
+    // Background sync to backend
+    fetch('http://localhost:5000/api/progress/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        courseId: id || 'striver',
+        videoId,
+        totalVideos: course?.totalVideos || 1,
+      }),
+    }).catch((err) => console.error('Background progress sync error:', err));
+  };
+
+  // Helper to advance to next video when current video ends
+  const playNextVideo = () => {
+    if (!course?.modules || !activeVideo) return;
+    const allLessons = course.modules.flatMap((m) => m.lessons);
+    const currentIndex = allLessons.findIndex((l) => l.videoId === activeVideo.videoId);
+
+    // 1. Mark current video as completed automatically
+    handleToggleComplete(activeVideo.videoId);
+
+    // 2. Advance to next video if available
+    if (currentIndex > -1 && currentIndex < allLessons.length - 1) {
+      const nextLesson = allLessons[currentIndex + 1];
+      setActiveVideo(nextLesson);
     }
   };
+
+  // Initialize YouTube IFrame API to listen for ENDED state (State 0)
+  useEffect(() => {
+    if (!activeVideo?.videoId) return;
+
+    // Load YT IFrame API Script if not loaded
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+
+    let ytPlayer = null;
+
+    const initPlayer = () => {
+      if (window.YT && window.YT.Player) {
+        try {
+          ytPlayer = new window.YT.Player('yt-player-iframe', {
+            events: {
+              onStateChange: (event) => {
+                // 0 = window.YT.PlayerState.ENDED
+                if (event.data === 0) {
+                  console.log('🎬 Video finished! Marking complete & advancing to next video...');
+                  playNextVideo();
+                }
+              },
+            },
+          });
+          playerRef.current = ytPlayer;
+        } catch (err) {
+          console.warn('YT player init notice:', err);
+        }
+      }
+    };
+
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      window.onYouTubeIframeAPIReady = initPlayer;
+    }
+
+    return () => {
+      if (ytPlayer && ytPlayer.destroy) {
+        try {
+          ytPlayer.destroy();
+        } catch (e) {}
+      }
+    };
+  }, [activeVideo?.videoId]);
 
   if (loading) {
     return (
       <div style={{ background: 'var(--bg)', minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
-        <p className="eyebrow">Loading CourseForge Path...</p>
+        <p className="eyebrow">Loading Playlist2Course Path...</p>
       </div>
     );
   }
@@ -89,16 +162,16 @@ export default function CourseView() {
 
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Header />
+      <Header hideNavLinks />
 
       <main className="shell" style={{ flex: 1, padding: '40px 0 80px' }}>
         {/* Top Breadcrumb & Title */}
-        <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
-            <Link to="/" style={{ font: "500 .7rem 'DM Mono', monospace", color: 'var(--muted)', textTransform: 'uppercase' }}>
-              ← Back to Home
+            <Link to="/dashboard" style={{ font: "500 .7rem 'DM Mono', monospace", color: 'var(--muted)', textTransform: 'uppercase' }}>
+              ← Back to Courses
             </Link>
-            <h1 className="display" style={{ fontSize: 'clamp(2rem, 3.8vw, 3.5rem)', marginTop: '12px' }}>
+            <h1 className="display" style={{ fontSize: 'clamp(1.8rem, 3.5vw, 2.5rem)', marginTop: '8px', margin: 0 }}>
               {course?.title || 'Structured Course'}<span className="dot">.</span>
             </h1>
           </div>
@@ -109,74 +182,37 @@ export default function CourseView() {
           )}
         </div>
 
-        {/* Course Header Bar with Progress Percentage */}
-        <div
-          style={{
-            background: 'var(--ink)',
-            color: 'var(--surface)',
-            padding: '24px 30px',
-            marginBottom: '40px',
-            boxShadow: 'var(--shadow)',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '24px',
-            alignItems: 'center'
-          }}
-        >
-          <div>
-            <div style={{ font: "500 .65rem 'DM Mono', monospace", color: 'var(--mint)', letterSpacing: '.1em', textTransform: 'uppercase' }}>
-              Overall Progress
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
-              <div
-                style={{
-                  width: '56px',
-                  height: '56px',
-                  borderRadius: '50%',
-                  border: '1px solid var(--mint)',
-                  display: 'grid',
-                  placeItems: 'center',
-                  color: 'var(--mint)',
-                  font: "500 .9rem 'DM Mono', monospace"
-                }}
-              >
-                {progressPercent}%
-              </div>
-              <div style={{ flex: 1 }}>
-                <div className="bar" style={{ height: '8px' }}>
-                  <span style={{ width: `${progressPercent}%`, background: 'var(--mint)' }}></span>
-                </div>
-                <p style={{ margin: '8px 0 0', font: ".68rem 'DM Mono', monospace", color: 'oklch(0.97 0.009 88 / .65)' }}>
-                  {completedCount} of {totalLessons} lessons completed
-                </p>
-              </div>
-            </div>
+        {/* Course Progress Card */}
+        <div style={{ marginBottom: '32px', background: 'var(--surface)', padding: '20px 24px', border: '1px solid var(--ink)', borderRadius: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <span style={{ font: "600 .85rem 'DM Mono', monospace" }}>Overall Course Completion</span>
+            <span style={{ font: "700 .95rem 'DM Mono', monospace", color: 'var(--accent)' }}>
+              {progressPercent}% ({completedCount} / {totalLessons} lessons)
+            </span>
           </div>
-
-          <div style={{ display: 'flex', gap: '20px', font: "500 .72rem 'DM Mono', monospace", justifyContent: 'flex-end' }}>
-            <div>
-              <div style={{ color: 'oklch(0.97 0.009 88 / .5)' }}>TOTAL LESSONS</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--surface)' }}>{totalLessons} Videos</div>
-            </div>
-            <div>
-              <div style={{ color: 'oklch(0.97 0.009 88 / .5)' }}>ESTIMATED TIME</div>
-              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--mint)' }}>{course?.totalDuration || '48h 15m'}</div>
-            </div>
+          <div style={{ width: '100%', height: '10px', background: '#e2e8f0', borderRadius: '5px', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${progressPercent}%`,
+                height: '100%',
+                background: 'var(--accent)',
+                transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            ></div>
           </div>
         </div>
 
-        {/* Main Grid: Video Player + Module Lesson List */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(320px, 1fr)', gap: '40px' }}>
-          {/* Left Column: Embedded Player */}
+        {/* Main 2-Column Grid */}
+        <div className="grid-2col" style={{ gridTemplateColumns: '1.6fr 1fr', gap: '32px', alignItems: 'start' }}>
+          {/* Left Column: Video Player */}
           <div>
-            <div style={{ background: '#000', aspectRatio: '16/9', boxShadow: '7px 7px 0 var(--ink)', overflow: 'hidden' }}>
-              {activeVideo ? (
+            <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', aspectRatio: '16/9', position: 'relative' }}>
+              {activeVideo?.videoId ? (
                 <iframe
-                  width="100%"
-                  height="100%"
-                  src={`https://www.youtube-nocookie.com/embed/${activeVideo.videoId}?autoplay=1`}
+                  id="yt-player-iframe"
+                  src={`https://www.youtube.com/embed/${activeVideo.videoId}?enablejsapi=1&autoplay=1`}
                   title={activeVideo.title}
-                  frameBorder="0"
+                  style={{ width: '100%', height: '100%', border: 0 }}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                 ></iframe>
@@ -187,15 +223,16 @@ export default function CourseView() {
               )}
             </div>
 
-            <div style={{ marginTop: '24px', padding: '20px', background: 'var(--surface)', border: '1px solid var(--ink)' }}>
+            <div style={{ marginTop: '24px', padding: '20px', background: 'var(--surface)', border: '1px solid var(--ink)', borderRadius: '12px' }}>
               <p className="eyebrow">NOW PLAYING</p>
               <h2 style={{ fontSize: '1.3rem', margin: '8px 0 12px', fontWeight: 700 }}>{activeVideo?.title}</h2>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ font: ".75rem 'DM Mono', monospace", color: 'var(--muted)' }}>Duration: {activeVideo?.duration}</span>
                 <button
+                  type="button"
                   className="button button-primary"
                   onClick={(e) => handleToggleComplete(activeVideo?.videoId, e)}
-                  style={{ minHeight: '36px', fontSize: '.78rem' }}
+                  style={{ minHeight: '36px', fontSize: '.78rem', cursor: 'pointer' }}
                 >
                   {completedVideoIds.includes(activeVideo?.videoId) ? '✓ Completed' : 'Mark as Complete'}
                 </button>
@@ -203,8 +240,20 @@ export default function CourseView() {
             </div>
           </div>
 
-          {/* Right Column: Interactive Course Modules */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--ink)', padding: '24px', maxHeight: '720px', overflowY: 'auto' }}>
+          {/* Right Column: Course Modules (Independent scrollable playlist) */}
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--ink)',
+              padding: '24px',
+              borderRadius: '12px',
+              height: '550px',
+              maxHeight: '550px',
+              overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              boxShadow: 'var(--shadow)',
+            }}
+          >
             <h3 style={{ margin: '0 0 20px', fontSize: '1.1rem', fontWeight: 700 }}>Course Modules</h3>
 
             {course?.modules?.map((moduleItem) => (
@@ -216,7 +265,8 @@ export default function CourseView() {
                     color: 'var(--surface)',
                     font: "500 .75rem 'DM Mono', monospace",
                     display: 'flex',
-                    justifyContent: 'space-between'
+                    justifyContent: 'space-between',
+                    borderRadius: '6px 6px 0 0',
                   }}
                 >
                   <span>
@@ -225,7 +275,7 @@ export default function CourseView() {
                   <span style={{ color: 'var(--mint)' }}>{moduleItem.lessons.length} Lessons</span>
                 </div>
 
-                <div style={{ border: '1px solid var(--line)', borderTop: 0 }}>
+                <div style={{ border: '1px solid var(--line)', borderTop: 0, borderRadius: '0 0 6px 6px' }}>
                   {moduleItem.lessons.map((lesson) => {
                     const isDone = completedVideoIds.includes(lesson.videoId);
                     const isActive = activeVideo?.videoId === lesson.videoId;
@@ -242,16 +292,47 @@ export default function CourseView() {
                           alignItems: 'center',
                           cursor: 'pointer',
                           background: isActive ? 'oklch(0.92 0.015 85)' : 'transparent',
-                          borderBottom: '1px solid var(--line)'
+                          borderBottom: '1px solid var(--line)',
+                          transition: 'background 0.15s ease',
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={isDone}
-                          onChange={(e) => handleToggleComplete(lesson.videoId, e)}
-                          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--accent)' }}
-                        />
-                        <span style={{ fontSize: '.84rem', fontWeight: isActive ? 700 : 500, textDecoration: isDone ? 'line-through' : 'none' }}>
+                        {/* Custom Animated Checkbox Button (Isolated Event Propagation) */}
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleComplete(lesson.videoId, e)}
+                          aria-label={`Toggle completion for ${lesson.title}`}
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '5px',
+                            border: isDone ? '2px solid var(--accent)' : '2px solid #94a3b8',
+                            background: isDone ? 'var(--accent)' : '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            padding: 0,
+                            outline: 'none',
+                          }}
+                        >
+                          {isDone && (
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </button>
+
+                        <span
+                          style={{
+                            fontSize: '.85rem',
+                            fontWeight: isActive ? 700 : 500,
+                            color: isDone ? '#64748b' : 'var(--ink)',
+                            textDecoration: isDone ? 'line-through' : 'none',
+                            transition: 'color 0.2s ease, text-decoration 0.2s ease, opacity 0.2s ease',
+                            opacity: isDone ? 0.75 : 1,
+                          }}
+                        >
                           {lesson.title}
                         </span>
                         <span style={{ font: ".65rem 'DM Mono', monospace", color: 'var(--muted)' }}>{lesson.duration}</span>

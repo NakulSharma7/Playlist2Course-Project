@@ -1,5 +1,6 @@
 import express from 'express';
 import Course from '../models/Course.js';
+import UserProgress from '../models/UserProgress.js';
 import { parsePlaylist } from '../services/youtubeParser.js';
 
 const router = express.Router();
@@ -10,24 +11,33 @@ const inMemoryCourses = new Map();
 // POST /api/courses/parse - Parse YouTube playlist URL dynamically and save course
 router.post('/parse', async (req, res) => {
   try {
-    const { playlistUrl } = req.body;
+    const { playlistUrl, userId, clerkUserId } = req.body;
+    const currentUserId = clerkUserId || userId || 'guest_user';
+
     if (!playlistUrl) {
       return res.status(400).json({ error: 'Playlist URL is required' });
     }
 
     const courseData = await parsePlaylist(playlistUrl);
-    
-    // Save to MongoDB if connected
+    courseData.userId = currentUserId;
+    courseData.clerkUserId = currentUserId;
+
+    // Save to MongoDB Atlas if connected
     try {
-      let existingCourse = await Course.findOne({ courseId: courseData.courseId });
+      let existingCourse = await Course.findOne({
+        courseId: courseData.courseId,
+        $or: [{ clerkUserId: currentUserId }, { userId: currentUserId }]
+      });
+
       if (!existingCourse) {
         existingCourse = new Course(courseData);
         await existingCourse.save();
       }
+
       return res.json({ success: true, courseId: existingCourse.courseId, course: existingCourse });
     } catch (dbErr) {
-      // Memory fallback
-      inMemoryCourses.set(courseData.courseId, courseData);
+      console.error('Database save error:', dbErr.message);
+      inMemoryCourses.set(`${currentUserId}:${courseData.courseId}`, courseData);
       return res.json({ success: true, courseId: courseData.courseId, course: courseData, note: 'Saved in memory mode' });
     }
   } catch (err) {
@@ -36,17 +46,49 @@ router.post('/parse', async (req, res) => {
   }
 });
 
-// GET /api/courses - List all courses created by users
+// GET /api/courses - List courses created by logged-in user (where clerkUserId = logged-in user)
 router.get('/', async (req, res) => {
   try {
+    const currentUserId = req.query.clerkUserId || req.query.userId;
     let coursesList = [];
+
     try {
-      coursesList = await Course.find({}).lean();
+      if (currentUserId) {
+        // Find courses where clerkUserId = logged-in user
+        coursesList = await Course.find({
+          $or: [{ clerkUserId: currentUserId }, { userId: currentUserId }]
+        }).lean();
+      } else {
+        coursesList = await Course.find({}).lean();
+      }
+
+      // Populate user progress from MongoDB for each course
+      if (currentUserId && coursesList.length > 0) {
+        const userProgresses = await UserProgress.find({ userId: currentUserId }).lean();
+        const progressMap = new Map(userProgresses.map(p => [p.courseId, p]));
+
+        coursesList = coursesList.map(course => {
+          const p = progressMap.get(course.courseId);
+          const completedCount = p?.completedVideoIds?.length || 0;
+          const total = course.totalVideos || 1;
+          const progressPercent = p?.progressPercent ?? Math.round((completedCount / total) * 100);
+
+          return {
+            ...course,
+            progressPercent,
+            completedCount,
+            completedVideoIds: p?.completedVideoIds || [],
+            lastWatchedVideoId: p?.lastWatchedVideoId || ''
+          };
+        });
+      }
     } catch (dbErr) {
-      // Memory fallback
+      console.error('Database fetch error:', dbErr.message);
     }
 
-    if (!coursesList || coursesList.length === 0) {
+    if ((!coursesList || coursesList.length === 0) && currentUserId) {
+      coursesList = Array.from(inMemoryCourses.values()).filter(c => c.clerkUserId === currentUserId || c.userId === currentUserId);
+    } else if (!coursesList || coursesList.length === 0) {
       coursesList = Array.from(inMemoryCourses.values());
     }
 
@@ -60,13 +102,27 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const courseId = req.params.id;
+    const currentUserId = req.query.clerkUserId || req.query.userId;
+
     try {
-      const course = await Course.findOne({ courseId });
+      let course;
+      if (currentUserId) {
+        course = await Course.findOne({
+          courseId,
+          $or: [{ clerkUserId: currentUserId }, { userId: currentUserId }]
+        });
+      }
+      if (!course) {
+        course = await Course.findOne({ courseId });
+      }
       if (course) return res.json(course);
     } catch (dbErr) {
-      // Memory fallback check
+      console.error('DB fetch error:', dbErr.message);
     }
 
+    if (currentUserId && inMemoryCourses.has(`${currentUserId}:${courseId}`)) {
+      return res.json(inMemoryCourses.get(`${currentUserId}:${courseId}`));
+    }
     if (inMemoryCourses.has(courseId)) {
       return res.json(inMemoryCourses.get(courseId));
     }

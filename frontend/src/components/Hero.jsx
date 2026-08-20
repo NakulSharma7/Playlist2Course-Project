@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 
 export default function Hero() {
+  const { user, isLoaded, isSignedIn } = useUser();
   const [url, setUrl] = useState('');
   const [isInvalid, setIsInvalid] = useState(false);
   const [formNote, setFormNote] = useState('');
@@ -10,6 +12,12 @@ export default function Hero() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Redirect signed out users to sign in page
+    if (isLoaded && !isSignedIn) {
+      navigate('/sign-in');
+      return;
+    }
     const value = url.trim();
     setIsInvalid(false);
 
@@ -28,7 +36,11 @@ export default function Hero() {
       const response = await fetch('http://localhost:5000/api/courses/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistUrl: value })
+        body: JSON.stringify({
+          playlistUrl: value,
+          userId: user?.id || 'guest_user',
+          clerkUserId: user?.id || 'guest_user'
+        })
       });
 
       const data = await response.json();
@@ -65,7 +77,7 @@ export default function Hero() {
             <span className="dot">.</span>
           </h1>
           <p className="lead">
-            Paste a playlist. Get a structured learning path. CourseForge organizes educational video playlists so you can learn in a clear, focused and trackable way.
+            Paste a playlist. Get a structured learning path. Playlist2Course organizes educational video playlists so you can learn in a clear, focused and trackable way.
           </p>
           <div className="hero-actions">
             <a href="#playlist" className="button button-primary" data-od-id="hero-primary-cta">

@@ -14,12 +14,22 @@ router.get('/:courseId', async (req, res) => {
     const userId = req.query.userId || 'guest_user';
 
     try {
-      const progress = await UserProgress.findOne({ userId, courseId });
+      const [progress, course] = await Promise.all([
+        UserProgress.findOne({ userId, courseId }),
+        Course.findOne({ courseId })
+      ]);
+
       if (progress) {
+        const completedCount = progress.completedVideoIds?.length || 0;
+        const total = course?.totalVideos || 1;
+        const progressPercent = Math.round((completedCount / total) * 100);
+
         return res.json({
-          completedVideoIds: progress.completedVideoIds,
-          progressPercent: progress.progressPercent,
-          lastWatchedVideoId: progress.lastWatchedVideoId
+          completedVideoIds: progress.completedVideoIds || [],
+          progressPercent,
+          completedCount,
+          totalVideos: total,
+          lastWatchedVideoId: progress.lastWatchedVideoId || ''
         });
       }
     } catch (dbErr) {
@@ -34,6 +44,8 @@ router.get('/:courseId', async (req, res) => {
     return res.json({
       completedVideoIds: [],
       progressPercent: 0,
+      completedCount: 0,
+      totalVideos: 0,
       lastWatchedVideoId: ''
     });
   } catch (err) {
@@ -41,16 +53,25 @@ router.get('/:courseId', async (req, res) => {
   }
 });
 
-// POST /api/progress/toggle - Toggle lesson completion & recalculate percentage
+// POST /api/progress/toggle - Toggle lesson completion & dynamically calculate percentage: (completed / total * 100)
 router.post('/toggle', async (req, res) => {
   try {
-    const { userId = 'guest_user', courseId, videoId, totalVideos = 55 } = req.body;
+    const { userId = 'guest_user', courseId, videoId } = req.body;
     if (!courseId || !videoId) {
       return res.status(400).json({ error: 'courseId and videoId are required' });
     }
 
-    let completedVideoIds = [];
-    let progressPercent = 0;
+    // Fetch actual course to get accurate totalVideos
+    let totalVideos = 1;
+    try {
+      const course = await Course.findOne({ courseId });
+      if (course && course.totalVideos) {
+        totalVideos = course.totalVideos;
+      }
+    } catch (err) {
+      // Fallback if course lookup fails
+      totalVideos = req.body.totalVideos || 1;
+    }
 
     // Try MongoDB first
     try {
@@ -66,8 +87,10 @@ router.post('/toggle', async (req, res) => {
         progress.completedVideoIds.push(videoId);
       }
 
+      const completedCount = progress.completedVideoIds.length;
+      // Dynamic Formula: (completedVideos / totalVideos) * 100
+      progress.progressPercent = Math.round((completedCount / totalVideos) * 100);
       progress.lastWatchedVideoId = videoId;
-      progress.progressPercent = Math.round((progress.completedVideoIds.length / totalVideos) * 100);
       progress.updatedAt = new Date();
       await progress.save();
 
@@ -75,7 +98,7 @@ router.post('/toggle', async (req, res) => {
         success: true,
         completedVideoIds: progress.completedVideoIds,
         progressPercent: progress.progressPercent,
-        totalCompleted: progress.completedVideoIds.length,
+        completedCount,
         totalVideos
       });
     } catch (dbErr) {
@@ -90,8 +113,9 @@ router.post('/toggle', async (req, res) => {
         data.completedVideoIds.push(videoId);
       }
 
+      const completedCount = data.completedVideoIds.length;
+      data.progressPercent = Math.round((completedCount / totalVideos) * 100);
       data.lastWatchedVideoId = videoId;
-      data.progressPercent = Math.round((data.completedVideoIds.length / totalVideos) * 100);
 
       inMemoryProgress.set(key, data);
 
@@ -99,7 +123,7 @@ router.post('/toggle', async (req, res) => {
         success: true,
         completedVideoIds: data.completedVideoIds,
         progressPercent: data.progressPercent,
-        totalCompleted: data.completedVideoIds.length,
+        completedCount,
         totalVideos
       });
     }

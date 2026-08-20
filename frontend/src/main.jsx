@@ -14,6 +14,10 @@ const RootApp = () => {
         publishableKey={PUBLISHABLE_KEY}
         signInUrl="/sign-in"
         signUpUrl="/sign-up"
+        signInFallbackRedirectUrl="/dashboard"
+        signUpFallbackRedirectUrl="/dashboard"
+        signInForceRedirectUrl="/dashboard"
+        signUpForceRedirectUrl="/dashboard"
         afterSignOutUrl="/"
       >
         <BrowserRouter>

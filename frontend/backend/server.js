@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB connection with serverless caching
+// MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (MONGODB_URI && mongoose.connection.readyState === 0) {
@@ -24,13 +24,15 @@ if (MONGODB_URI && mongoose.connection.readyState === 0) {
 }
 
 // Health Check
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health'], (req, res) => {
   res.json({ status: 'OK', service: 'Playlist2Course Backend API', mongodbConnected: mongoose.connection.readyState === 1 });
 });
 
-// Routes
+// Routes mounted on both /api/ and root / for Vercel & Express compatibility
 app.use('/api/courses', courseRoutes);
+app.use('/courses', courseRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/progress', progressRoutes);
 
 export default app;
 
